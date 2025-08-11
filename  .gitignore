@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Packages / build
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Type checkers / linters
+.mypy_cache/
+.pytype/
+.pyre/
+.cache/
+
+# Logs
+*.log
+
+# IDE / Editor
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific outputs
+extracted_images/
+images/
+texto_extraido_*.txt
+
+# PDFs (não versionar por padrão)
+*.pdf
+!teste.pdf
+
+# Notebooks
+.ipynb_checkpoints/
