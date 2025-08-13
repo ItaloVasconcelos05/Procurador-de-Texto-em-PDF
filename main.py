@@ -1,29 +1,34 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Extrator de Parágrafos por Palavra-chave
+========================================
+
+Este script permite extrair parágrafos específicos de PDFs baseados em palavras-chave.
+Ideal para encontrar seções específicas em documentos longos.
+
+Uso:
+    python buscar_paragrafos_simples.py
+"""
+
 import io
 import os
+import re
 from PIL import Image
 import pytesseract
-import PyPDF2
 import fitz  # PyMuPDF
 
-# Aumentar com segurança o limite de pixels do Pillow para evitar DecompressionBombError
-# Alternativa: defina para um valor alto em vez de None, por segurança adicional
+# Aumentar com segurança o limite de pixels do Pillow
 Image.MAX_IMAGE_PIXELS = 300_000_000
-
-PDF_PATH = "teste.pdf"
-OUTPUT_FOLDER = "extracted_images"
 
 
 def configure_tesseract_cmd() -> bool:
-    """Configura automaticamente o caminho do executável do Tesseract no Windows.
-    Retorna True se configurado/encontrado, False caso contrário.
-    """
-    # 1) Variável de ambiente explícita
+    """Configura automaticamente o caminho do executável do Tesseract no Windows."""
     env_path = os.environ.get('TESSERACT_PATH')
     if env_path and os.path.isfile(env_path):
         pytesseract.pytesseract.tesseract_cmd = env_path
         return True
 
-    # 2) Caminhos comuns
     common_paths = [
         r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
         r"C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe",
@@ -33,7 +38,6 @@ def configure_tesseract_cmd() -> bool:
             pytesseract.pytesseract.tesseract_cmd = candidate
             return True
 
-    # 3) Registro do Windows
     try:
         import winreg
         reg_paths = [
@@ -45,7 +49,6 @@ def configure_tesseract_cmd() -> bool:
             try:
                 with winreg.OpenKey(hive, subkey) as key:
                     try:
-                        # App Paths: valor padrão aponta direto para o exe
                         exe_path, _ = winreg.QueryValueEx(key, None)
                         if exe_path and os.path.isfile(exe_path):
                             pytesseract.pytesseract.tesseract_cmd = exe_path
@@ -64,65 +67,9 @@ def configure_tesseract_cmd() -> bool:
             except FileNotFoundError:
                 continue
     except Exception:
-        # Sem winreg ou erro de acesso ao Registro
         pass
 
     return False
-
-
-def extract_images_from_pdf(pdf_path, output_folder):
-    """Extrai imagens incorporadas no PDF e salva na pasta especificada."""
-    if not os.path.isdir(output_folder):
-        os.makedirs(output_folder)
-
-    extracted_images = []
-
-    with open(pdf_path, 'rb') as pdf_file:
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
-
-        for page_num in range(len(pdf_reader.pages)):
-            page = pdf_reader.pages[page_num]
-            for image_file_object in getattr(page, 'images', []):
-                try:
-                    image = Image.open(io.BytesIO(image_file_object.data))
-
-                    image_name = f"image_page_{page_num + 1}_{image_file_object.name}.png"
-                    image_path = os.path.join(output_folder, image_name)
-
-                    image.save(image_path)
-                    extracted_images.append({
-                        'path': image_path,
-                        'page': page_num + 1,
-                        'name': image_file_object.name
-                    })
-                    print(f"Imagem salva: {image_path}")
-                except Exception as e:
-                    print(f"Erro ao processar imagem: {e}")
-
-    return extracted_images
-
-
-def extract_text_from_saved_images(images_list, language='por'):
-    """Extrai texto das imagens já salvas no disco usando Tesseract OCR."""
-    print("\nExtraindo texto das imagens salvas...")
-
-    for image_info in images_list:
-        try:
-            image = Image.open(image_info['path'])
-            try:
-                text = pytesseract.image_to_string(image, lang=language)
-            except pytesseract.TesseractError:
-                print(f"Idioma '{language}' indisponível. Tentando 'eng'.")
-                text = pytesseract.image_to_string(image, lang='eng')
-
-            if text.strip():
-                print(f"\nTexto extraído da imagem {image_info['name']} (página {image_info['page']}):")
-                print(text.strip())
-            else:
-                print(f"Nenhum texto encontrado na imagem {image_info['name']} (página {image_info['page']})")
-
-        except Exception as e:
-            print(f"Erro ao processar imagem {image_info['name']}: {e}")
 
 
 def _compute_zoom_for_page(page, requested_dpi, max_total_pixels):
@@ -130,81 +77,211 @@ def _compute_zoom_for_page(page, requested_dpi, max_total_pixels):
     page_w_in = page.rect.width / 72.0
     page_h_in = page.rect.height / 72.0
     page_area_in2 = max(page_w_in * page_h_in, 1e-6)
-
-    # DPI máximo permitido para respeitar o limite de pixels
     max_dpi_allowed = (max_total_pixels / page_area_in2) ** 0.5
     target_dpi = min(requested_dpi, max_dpi_allowed)
-    # Evitar DPI muito baixo que prejudique o OCR
     target_dpi = max(target_dpi, 120)
     return target_dpi / 72.0
 
 
-def ocr_pdf_by_render(pdf_path, dpi=300, language='por', save_page_images=False, pages_folder=None, max_pixels=25_000_000):
-    """Renderiza cada página do PDF em imagem e aplica OCR com controle de resolução.
-
-    - dpi: 300 recomendado para melhor acurácia
-    - language: idioma do OCR (ex.: 'por', 'eng')
-    - save_page_images: se True, salva as imagens das páginas renderizadas
-    - pages_folder: pasta onde salvar as imagens das páginas
-    - max_pixels: limite máximo de pixels por imagem renderizada (para evitar estouro de memória)
+def buscar_paragrafos(pdf_path, keyword, dpi=300, language='por', 
+                     context_lines=2, case_sensitive=False, 
+                     max_pixels=25_000_000):
     """
-    if save_page_images:
-        pages_folder = pages_folder or os.path.join(OUTPUT_FOLDER, 'pages')
-        os.makedirs(pages_folder, exist_ok=True)
+    Busca parágrafos que contêm uma palavra-chave específica.
+    
+    Args:
+        pdf_path: Caminho para o arquivo PDF
+        keyword: Palavra-chave para buscar
+        dpi: Resolução de renderização (padrão: 300)
+        language: Idioma para OCR (padrão: 'por')
+        context_lines: Número de linhas de contexto antes e depois (padrão: 2)
+        case_sensitive: Se a busca deve ser sensível a maiúsculas/minúsculas (padrão: False)
+        max_pixels: Limite de pixels por imagem (padrão: 25M)
+    
+    Returns:
+        Lista de dicionários com informações dos parágrafos encontrados
+    """
+    if not os.path.exists(pdf_path):
+        print(f"❌ Erro: Arquivo {pdf_path} não encontrado!")
+        return []
 
-    print("\nOCR por renderização das páginas (recomendado)...")
+    print(f"📄 Processando arquivo: {pdf_path}")
+    print(f"🔍 Buscando por: '{keyword}'")
+    print(f"🌐 Idioma OCR: {language}")
+    print(f"📝 Contexto: {context_lines} linhas")
+    print(f"🔤 Case sensitive: {case_sensitive}")
+    print("-" * 50)
+
+    found_paragraphs = []
+    
+    # Preparar regex para busca
+    if case_sensitive:
+        pattern = re.compile(re.escape(keyword))
+    else:
+        pattern = re.compile(re.escape(keyword), re.IGNORECASE)
+
     with fitz.open(pdf_path) as doc:
+        total_pages = len(doc)
+        print(f"📖 Total de páginas: {total_pages}")
+        
         for page_index, page in enumerate(doc):
+            print(f"⏳ Processando página {page_index + 1}/{total_pages}...", end="\r")
+            
             zoom = _compute_zoom_for_page(page, dpi, max_pixels)
             mat = fitz.Matrix(zoom, zoom)
-            # Render em tons de cinza para reduzir memória e melhorar OCR
             pix = page.get_pixmap(matrix=mat, alpha=False, colorspace=fitz.csGRAY)
             img_bytes = pix.tobytes("png")
             image = Image.open(io.BytesIO(img_bytes))
 
-            if save_page_images:
-                page_img_path = os.path.join(pages_folder, f"page_{page_index + 1}.png")
-                image.save(page_img_path)
-
             try:
                 text = pytesseract.image_to_string(image, lang=language)
             except pytesseract.TesseractError:
-                print(f"Idioma '{language}' indisponível. Tentando 'eng'.")
+                print(f"\n⚠️  Idioma '{language}' indisponível. Tentando 'eng'.")
                 text = pytesseract.image_to_string(image, lang='eng')
 
-            print(f"\n--- Página {page_index + 1} ---")
-            print(text.strip())
+            # Dividir texto em linhas
+            lines = text.strip().split('\n')
+            
+            # Buscar pela palavra-chave em cada linha
+            for line_num, line in enumerate(lines):
+                if pattern.search(line):
+                    # Encontrar o início e fim do parágrafo
+                    start_line = max(0, line_num - context_lines)
+                    end_line = min(len(lines), line_num + context_lines + 1)
+                    
+                    # Extrair o parágrafo com contexto
+                    paragraph_lines = lines[start_line:end_line]
+                    paragraph_text = '\n'.join(paragraph_lines).strip()
+                    
+                    # Destacar a palavra-chave encontrada
+                    highlighted_text = pattern.sub(f"**{keyword}**", paragraph_text)
+                    
+                    paragraph_info = {
+                        'page': page_index + 1,
+                        'line_number': line_num + 1,
+                        'keyword_line': line_num + 1,
+                        'text': paragraph_text,
+                        'highlighted_text': highlighted_text,
+                        'context_start': start_line + 1,
+                        'context_end': end_line
+                    }
+                    
+                    found_paragraphs.append(paragraph_info)
+                    
+                    print(f"\n✅ Página {page_index + 1}, Linha {line_num + 1}")
+                    print(highlighted_text)
+                    print("-" * 40)
+
+    print(f"\n📊 Processamento concluído!")
+    
+    # Salvar resultados em arquivo
+    if found_paragraphs:
+        output_file = f"paragrafos_encontrados_{os.path.splitext(os.path.basename(pdf_path))[0]}.txt"
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(f"Busca por: '{keyword}'\n")
+            f.write(f"Total de parágrafos encontrados: {len(found_paragraphs)}\n")
+            f.write("=" * 60 + "\n\n")
+            
+            for i, para in enumerate(found_paragraphs, 1):
+                f.write(f"Parágrafo {i}:\n")
+                f.write(f"Página: {para['page']}\n")
+                f.write(f"Linha da palavra-chave: {para['keyword_line']}\n")
+                f.write(f"Contexto: linhas {para['context_start']}-{para['context_end']}\n")
+                f.write("-" * 40 + "\n")
+                f.write(para['highlighted_text'])
+                f.write("\n\n")
+        
+        print(f"💾 Resultados salvos em: {output_file}")
+        print(f"🎯 Total de parágrafos encontrados: {len(found_paragraphs)}")
+    else:
+        print(f"❌ Nenhum parágrafo contendo '{keyword}' foi encontrado.")
+
+    return found_paragraphs
 
 
 def main():
-    print("=== Extrator de Texto de Imagens em PDF ===\n")
-
-    if not os.path.exists(PDF_PATH):
-        print(f"Erro: Arquivo {PDF_PATH} não encontrado!")
-        return
-
+    """Função principal com interface interativa."""
+    print("=" * 60)
+    print("🔍 EXTRATOR DE PARÁGRAFOS POR PALAVRA-CHAVE")
+    print("=" * 60)
+    
+    # Verificar se o Tesseract está configurado
     if not configure_tesseract_cmd():
-        print("Erro: Tesseract OCR não encontrado.")
-        print("- Instale pelo menos uma destas opções:")
-        print("  1) UB Mannheim: https://github.com/UB-Mannheim/tesseract/wiki")
-        print("  2) winget: winget install --id UB-Mannheim.TesseractOCR -e")
-        print("  3) Chocolatey: choco install tesseract")
-        print("- Ou defina a variável de ambiente TESSERACT_PATH com o caminho do tesseract.exe")
+        print("❌ Erro: Tesseract OCR não encontrado.")
+        print("\n📋 Para instalar o Tesseract:")
+        print("   1) UB Mannheim: https://github.com/UB-Mannheim/tesseract/wiki")
+        print("   2) winget: winget install --id UB-Mannheim.TesseractOCR -e")
+        print("   3) Chocolatey: choco install tesseract")
+        print("\n   Ou defina a variável de ambiente TESSERACT_PATH")
+        input("\nPressione Enter para sair...")
         return
 
-    # Método 1 (Recomendado): Renderizar páginas e aplicar OCR com controle de resolução
-    ocr_pdf_by_render(PDF_PATH, dpi=300, language='por', save_page_images=True, max_pixels=25_000_000)
+    # Solicitar arquivo PDF
+    pdf_file = input("\n📄 Digite o caminho do arquivo PDF (ou pressione Enter para 'teste.pdf'): ").strip()
+    if not pdf_file:
+        pdf_file = "teste.pdf"
+    
+    if not os.path.exists(pdf_file):
+        print(f"❌ Erro: Arquivo '{pdf_file}' não encontrado!")
+        input("\nPressione Enter para sair...")
+        return
 
-    # Método 2 (Opcional): Extrair imagens incorporadas e aplicar OCR nelas
-    print("\n" + "=" * 50)
-    print("Método 2 (opcional): Extraindo imagens incorporadas e aplicando OCR...")
-    extracted_images = extract_images_from_pdf(PDF_PATH, OUTPUT_FOLDER)
-    if extracted_images:
-        extract_text_from_saved_images(extracted_images, language='por')
-    else:
-        print("Nenhuma imagem incorporada encontrada no PDF.")
+    # Solicitar palavra-chave
+    keyword = input("\n🔍 Digite a palavra-chave que deseja buscar: ").strip()
+    if not keyword:
+        print("❌ Nenhuma palavra-chave fornecida.")
+        input("\nPressione Enter para sair...")
+        return
+
+    # Configurações opcionais
+    print("\n⚙️  Configurações opcionais (pressione Enter para usar padrões):")
+    
+    # Idioma
+    language = input("   Idioma para OCR (por/eng) [por]: ").strip()
+    if not language:
+        language = "por"
+    
+    # Linhas de contexto
+    context_input = input("   Linhas de contexto antes/depois [2]: ").strip()
+    try:
+        context_lines = int(context_input) if context_input else 2
+    except ValueError:
+        context_lines = 2
+        print("   Usando valor padrão: 2 linhas")
+    
+    # Case sensitive
+    case_sensitive = input("   Busca sensível a maiúsculas/minúsculas? (s/n) [n]: ").strip().lower()
+    case_sensitive = case_sensitive == 's'
+
+    print(f"\n🚀 Iniciando busca por '{keyword}' no arquivo '{pdf_file}'...")
+    print("⏳ Isso pode levar alguns minutos dependendo do tamanho do PDF...")
+    
+    try:
+        # Executar a busca
+        results = buscar_paragrafos(
+            pdf_path=pdf_file,
+            keyword=keyword,
+            language=language,
+            context_lines=context_lines,
+            case_sensitive=case_sensitive
+        )
+        
+        # Resumo final
+        print("\n" + "=" * 60)
+        if results:
+            print(f"✅ Busca concluída! Encontrados {len(results)} parágrafo(s).")
+            print(f"📁 Resultados salvos em: paragrafos_encontrados_{os.path.splitext(os.path.basename(pdf_file))[0]}.txt")
+        else:
+            print(f"❌ Nenhum parágrafo contendo '{keyword}' foi encontrado.")
+        
+        print("=" * 60)
+        
+    except Exception as e:
+        print(f"\n❌ Erro durante o processamento: {e}")
+        print("💡 Verifique se o arquivo PDF não está corrompido e tente novamente.")
+    
+    input("\nPressione Enter para sair...")
 
 
 if __name__ == "__main__":
     main()
-                        
