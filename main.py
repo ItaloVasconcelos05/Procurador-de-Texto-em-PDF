@@ -85,7 +85,7 @@ def _compute_zoom_for_page(page, requested_dpi, max_total_pixels):
 
 def buscar_paragrafos(pdf_path, keyword, dpi=300, language='por', 
                      context_lines=2, case_sensitive=False, 
-                     max_pixels=25_000_000):
+                     max_pixels=25_000_000, output_folder="resultados"):
     """
     Busca parágrafos que contêm uma palavra-chave específica.
     
@@ -97,6 +97,7 @@ def buscar_paragrafos(pdf_path, keyword, dpi=300, language='por',
         context_lines: Número de linhas de contexto antes e depois (padrão: 2)
         case_sensitive: Se a busca deve ser sensível a maiúsculas/minúsculas (padrão: False)
         max_pixels: Limite de pixels por imagem (padrão: 25M)
+        output_folder: Pasta onde salvar os resultados (padrão: "resultados")
     
     Returns:
         Lista de dicionários com informações dos parágrafos encontrados
@@ -105,11 +106,17 @@ def buscar_paragrafos(pdf_path, keyword, dpi=300, language='por',
         print(f"❌ Erro: Arquivo {pdf_path} não encontrado!")
         return []
 
+    # Criar pasta de resultados se não existir
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        print(f"📁 Pasta '{output_folder}' criada.")
+
     print(f"📄 Processando arquivo: {pdf_path}")
     print(f"🔍 Buscando por: '{keyword}'")
     print(f"🌐 Idioma OCR: {language}")
     print(f"📝 Contexto: {context_lines} linhas")
     print(f"🔤 Case sensitive: {case_sensitive}")
+    print(f"📁 Pasta de resultados: {output_folder}")
     print("-" * 50)
 
     found_paragraphs = []
@@ -176,9 +183,16 @@ def buscar_paragrafos(pdf_path, keyword, dpi=300, language='por',
     
     # Salvar resultados em arquivo
     if found_paragraphs:
-        output_file = f"paragrafos_encontrados_{os.path.splitext(os.path.basename(pdf_path))[0]}.txt"
+        # Criar nome do arquivo com timestamp para evitar sobrescrita
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        output_file = os.path.join(output_folder, f"paragrafos_{pdf_name}_{keyword}_{timestamp}.txt")
+        
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(f"Busca por: '{keyword}'\n")
+            f.write(f"Arquivo PDF: {pdf_path}\n")
+            f.write(f"Data/Hora: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
             f.write(f"Total de parágrafos encontrados: {len(found_paragraphs)}\n")
             f.write("=" * 60 + "\n\n")
             
@@ -199,12 +213,61 @@ def buscar_paragrafos(pdf_path, keyword, dpi=300, language='por',
     return found_paragraphs
 
 
+def listar_resultados(pasta="resultados"):
+    """Lista todos os arquivos de resultados salvos na pasta especificada."""
+    if not os.path.exists(pasta):
+        print(f"📁 Pasta '{pasta}' não encontrada.")
+        return
+    
+    arquivos = [f for f in os.listdir(pasta) if f.endswith('.txt')]
+    
+    if not arquivos:
+        print(f"📁 Nenhum arquivo de resultado encontrado na pasta '{pasta}'.")
+        return
+    
+    print(f"\n📋 Arquivos de resultados em '{pasta}/':")
+    print("-" * 50)
+    
+    for i, arquivo in enumerate(sorted(arquivos, reverse=True), 1):
+        caminho_completo = os.path.join(pasta, arquivo)
+        tamanho = os.path.getsize(caminho_completo)
+        data_mod = os.path.getmtime(caminho_completo)
+        from datetime import datetime
+        data_str = datetime.fromtimestamp(data_mod).strftime('%d/%m/%Y %H:%M')
+        
+        print(f"{i:2d}. {arquivo}")
+        print(f"    📅 {data_str} | 📏 {tamanho:,} bytes")
+        print()
+
+
 def main():
     """Função principal com interface interativa."""
-    print("=" * 60)
-    print("🔍 EXTRATOR DE PARÁGRAFOS POR PALAVRA-CHAVE")
-    print("=" * 60)
-    
+    while True:
+        print("=" * 60)
+        print("🔍 EXTRATOR DE PARÁGRAFOS POR PALAVRA-CHAVE")
+        print("=" * 60)
+        print("\n📋 Menu:")
+        print("1. 🔍 Buscar parágrafos por palavra-chave")
+        print("2. 📋 Listar resultados salvos")
+        print("3. 🚪 Sair")
+        
+        opcao = input("\nEscolha uma opção (1-3): ").strip()
+        
+        if opcao == "1":
+            executar_busca()
+        elif opcao == "2":
+            listar_resultados()
+            input("\nPressione Enter para continuar...")
+        elif opcao == "3":
+            print("\n👋 Até logo!")
+            break
+        else:
+            print("❌ Opção inválida. Tente novamente.")
+            input("\nPressione Enter para continuar...")
+
+
+def executar_busca():
+    """Executa a busca de parágrafos por palavra-chave."""
     # Verificar se o Tesseract está configurado
     if not configure_tesseract_cmd():
         print("❌ Erro: Tesseract OCR não encontrado.")
@@ -252,6 +315,11 @@ def main():
     # Case sensitive
     case_sensitive = input("   Busca sensível a maiúsculas/minúsculas? (s/n) [n]: ").strip().lower()
     case_sensitive = case_sensitive == 's'
+    
+    # Pasta de resultados
+    output_folder = input("   Pasta para salvar resultados [resultados]: ").strip()
+    if not output_folder:
+        output_folder = "resultados"
 
     print(f"\n🚀 Iniciando busca por '{keyword}' no arquivo '{pdf_file}'...")
     print("⏳ Isso pode levar alguns minutos dependendo do tamanho do PDF...")
@@ -263,14 +331,15 @@ def main():
             keyword=keyword,
             language=language,
             context_lines=context_lines,
-            case_sensitive=case_sensitive
+            case_sensitive=case_sensitive,
+            output_folder=output_folder
         )
         
         # Resumo final
         print("\n" + "=" * 60)
         if results:
             print(f"✅ Busca concluída! Encontrados {len(results)} parágrafo(s).")
-            print(f"📁 Resultados salvos em: paragrafos_encontrados_{os.path.splitext(os.path.basename(pdf_file))[0]}.txt")
+            print(f"📁 Resultados salvos na pasta: {output_folder}/")
         else:
             print(f"❌ Nenhum parágrafo contendo '{keyword}' foi encontrado.")
         
@@ -280,7 +349,7 @@ def main():
         print(f"\n❌ Erro durante o processamento: {e}")
         print("💡 Verifique se o arquivo PDF não está corrompido e tente novamente.")
     
-    input("\nPressione Enter para sair...")
+    input("\nPressione Enter para continuar...")
 
 
 if __name__ == "__main__":

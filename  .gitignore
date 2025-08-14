@@ -46,6 +46,7 @@ Thumbs.db
 extracted_images/
 images/
 texto_extraido_*.txt
+resultados/
 
 # PDFs (não versionar por padrão)
 *.pdf

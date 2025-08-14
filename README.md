@@ -7,10 +7,11 @@ Este projeto permite **extrair parágrafos específicos de PDFs baseados em pala
 - **Busca por palavra-chave** em PDFs usando OCR
 - **Contexto configurável** (linhas antes/depois)
 - **Busca case-sensitive/insensitive**
-- **Resultados organizados** em arquivo de texto
-- **Interface interativa** amigável
+- **Resultados organizados** em pasta específica
+- **Interface interativa** com menu
 - **Suporte a múltiplos idiomas** (português/inglês)
 - **Destaque da palavra-chave** nos resultados
+- **Listagem de resultados** salvos
 
 ## 📋 Pré-requisitos
 
@@ -32,25 +33,29 @@ pip install -r requirements.txt
 
 ### 2. Executar o Script
 ```bash
-python buscar_paragrafos_simples.py
+python main.py
 ```
 
-### 3. Seguir as Instruções
-- Digite o caminho do PDF (ou pressione Enter para 'teste.pdf')
-- Digite a palavra-chave que deseja buscar
-- Configure opções como idioma e contexto
-- Aguarde o processamento
-- Os resultados são salvos automaticamente
+### 3. Usar o Menu Interativo
+O programa oferece um menu com 3 opções:
 
-## 📁 Arquivos do Projeto
+1. **🔍 Buscar parágrafos por palavra-chave** - Função principal
+2. **📋 Listar resultados salvos** - Ver arquivos já processados
+3. **🚪 Sair** - Encerrar o programa
+
+## 📁 Estrutura do Projeto
 
 ```
 Texto-Lara/
-├── buscar_paragrafos_simples.py  # Script principal (ÚNICO arquivo necessário)
-├── requirements.txt              # Dependências Python
-├── README_SIMPLES.md            # Este arquivo
-├── teste.pdf                    # Arquivo PDF de teste (opcional)
-└── paragrafos_encontrados_*.txt # Resultados gerados automaticamente
+├── main.py                    # Script principal
+├── requirements.txt           # Dependências Python
+├── README.md                 # Este arquivo
+├── teste.pdf                 # Arquivo PDF de teste (opcional)
+├── resultados/               # Pasta com resultados (criada automaticamente)
+│   ├── paragrafos_teste_contrato_20241201_143022.txt
+│   ├── paragrafos_documento_artigo_20241201_150145.txt
+│   └── ...
+└── venv/                    # Ambiente virtual (se usado)
 ```
 
 ## 📊 Exemplo de Uso
@@ -59,6 +64,13 @@ Texto-Lara/
 🔍 EXTRATOR DE PARÁGRAFOS POR PALAVRA-CHAVE
 ============================================================
 
+📋 Menu:
+1. 🔍 Buscar parágrafos por palavra-chave
+2. 📋 Listar resultados salvos
+3. 🚪 Sair
+
+Escolha uma opção (1-3): 1
+
 📄 Digite o caminho do arquivo PDF (ou pressione Enter para 'teste.pdf'): 
 🔍 Digite a palavra-chave que deseja buscar: contrato
 
@@ -66,15 +78,18 @@ Texto-Lara/
    Idioma para OCR (por/eng) [por]: 
    Linhas de contexto antes/depois [2]: 
    Busca sensível a maiúsculas/minúsculas? (s/n) [n]: 
+   Pasta para salvar resultados [resultados]: 
 
 🚀 Iniciando busca por 'contrato' no arquivo 'teste.pdf'...
 ⏳ Isso pode levar alguns minutos dependendo do tamanho do PDF...
 
+📁 Pasta 'resultados' criada.
 📄 Processando arquivo: teste.pdf
 🔍 Buscando por: 'contrato'
 🌐 Idioma OCR: por
 📝 Contexto: 2 linhas
 🔤 Case sensitive: False
+📁 Pasta de resultados: resultados
 --------------------------------------------------
 📖 Total de páginas: 5
 ⏳ Processando página 5/5...
@@ -84,21 +99,25 @@ Este é um exemplo de **contrato** de prestação de serviços...
 ----------------------------------------
 
 📊 Processamento concluído!
-💾 Resultados salvos em: paragrafos_encontrados_teste.txt
+💾 Resultados salvos em: resultados/paragrafos_teste_contrato_20241201_143022.txt
 🎯 Total de parágrafos encontrados: 1
 
 ============================================================
 ✅ Busca concluída! Encontrados 1 parágrafo(s).
-📁 Resultados salvos em: paragrafos_encontrados_teste.txt
+📁 Resultados salvos na pasta: resultados/
 ============================================================
 ```
 
 ## 📄 Formato dos Resultados
 
-Os parágrafos encontrados são salvos em arquivos como `paragrafos_encontrados_documento.txt` com:
+Os parágrafos encontrados são salvos em arquivos na pasta `resultados/` com o formato:
+`paragrafos_[nome_pdf]_[palavra_chave]_[timestamp].txt`
 
+Exemplo de conteúdo:
 ```
 Busca por: 'contrato'
+Arquivo PDF: teste.pdf
+Data/Hora: 01/12/2024 14:30:22
 Total de parágrafos encontrados: 1
 ============================================================
 
@@ -112,11 +131,26 @@ que pode ser encontrado em documentos legais.
 O texto aqui mostra o contexto completo.
 ```
 
+## 📋 Listagem de Resultados
+
+Use a opção "Listar resultados salvos" para ver todos os arquivos processados:
+
+```
+📋 Arquivos de resultados em 'resultados/':
+--------------------------------------------------
+ 1. paragrafos_teste_contrato_20241201_143022.txt
+    📅 01/12/2024 14:30 | 📏 1,245 bytes
+
+ 2. paragrafos_documento_artigo_20241201_150145.txt
+    📅 01/12/2024 15:01 | 📏 2,156 bytes
+```
+
 ## ⚙️ Configurações Disponíveis
 
 - **Idioma OCR**: português (padrão) ou inglês
 - **Contexto**: número de linhas antes/depois (padrão: 2)
 - **Case sensitive**: busca exata ou não (padrão: não)
+- **Pasta de resultados**: pasta personalizada (padrão: "resultados")
 - **Resolução**: DPI para renderização (padrão: 300)
 
 ## 🔧 Solução de Problemas
@@ -155,6 +189,16 @@ O texto aqui mostra o contexto completo.
 3. **Use case-sensitive** quando precisar de busca exata
 4. **Teste com diferentes idiomas** se o documento for multilíngue
 5. **Verifique a qualidade do PDF** para melhor reconhecimento
+6. **Organize os resultados** em pastas específicas para cada projeto
+7. **Use a listagem** para acompanhar todos os arquivos processados
+
+## 🔄 Recursos Avançados
+
+- **Timestamp automático**: Evita sobrescrita de arquivos
+- **Metadados completos**: Inclui data/hora e informações do PDF
+- **Menu interativo**: Interface amigável e intuitiva
+- **Organização automática**: Criação automática de pastas
+- **Listagem detalhada**: Informações sobre arquivos salvos
 
 ---
 
