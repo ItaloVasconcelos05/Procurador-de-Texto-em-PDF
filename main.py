@@ -85,7 +85,8 @@ def _compute_zoom_for_page(page, requested_dpi, max_total_pixels):
 
 def buscar_paragrafos(pdf_path, keyword, dpi=300, language='por', 
                      context_lines=2, case_sensitive=False, 
-                     max_pixels=25_000_000, output_folder="resultados"):
+                     max_pixels=25_000_000, output_folder="resultados",
+                     exclude_terms=None):
     """
     Busca parágrafos que contêm uma palavra-chave específica.
     
@@ -116,6 +117,8 @@ def buscar_paragrafos(pdf_path, keyword, dpi=300, language='por',
     print(f"🌐 Idioma OCR: {language}")
     print(f"📝 Contexto: {context_lines} linhas")
     print(f"🔤 Case sensitive: {case_sensitive}")
+    if exclude_terms:
+        print(f"🚫 Excluindo parágrafos que contenham: {', '.join(exclude_terms)}")
     print(f"📁 Pasta de resultados: {output_folder}")
     print("-" * 50)
 
@@ -126,6 +129,17 @@ def buscar_paragrafos(pdf_path, keyword, dpi=300, language='por',
         pattern = re.compile(re.escape(keyword))
     else:
         pattern = re.compile(re.escape(keyword), re.IGNORECASE)
+
+    # Preparar padrões de exclusão, se fornecidos
+    exclude_patterns = []
+    if exclude_terms:
+        for term in exclude_terms:
+            if not term:
+                continue
+            if case_sensitive:
+                exclude_patterns.append(re.compile(re.escape(term)))
+            else:
+                exclude_patterns.append(re.compile(re.escape(term), re.IGNORECASE))
 
     with fitz.open(pdf_path) as doc:
         total_pages = len(doc)
@@ -159,6 +173,15 @@ def buscar_paragrafos(pdf_path, keyword, dpi=300, language='por',
                     # Extrair o parágrafo com contexto
                     paragraph_lines = lines[start_line:end_line]
                     paragraph_text = '\n'.join(paragraph_lines).strip()
+
+                    # Verificar exclusões: descartamos se QUALQUER termo proibido aparecer no parágrafo completo
+                    should_exclude = False
+                    for ex_pat in exclude_patterns:
+                        if ex_pat.search(paragraph_text):
+                            should_exclude = True
+                            break
+                    if should_exclude:
+                        continue
                     
                     # Destacar a palavra-chave encontrada
                     highlighted_text = pattern.sub(f"**{keyword}**", paragraph_text)
@@ -321,6 +344,10 @@ def executar_busca():
     if not output_folder:
         output_folder = "resultados"
 
+    # Palavras a excluir
+    exclude_input = input("   Palavras para excluir (separe por vírgula) []: ").strip()
+    exclude_terms = [t.strip() for t in exclude_input.split(',') if t.strip()] if exclude_input else None
+
     print(f"\n🚀 Iniciando busca por '{keyword}' no arquivo '{pdf_file}'...")
     print("⏳ Isso pode levar alguns minutos dependendo do tamanho do PDF...")
     
@@ -332,7 +359,8 @@ def executar_busca():
             language=language,
             context_lines=context_lines,
             case_sensitive=case_sensitive,
-            output_folder=output_folder
+            output_folder=output_folder,
+            exclude_terms=exclude_terms
         )
         
         # Resumo final
