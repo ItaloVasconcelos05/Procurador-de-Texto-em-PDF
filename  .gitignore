@@ -1,3 +1,6 @@
+# Arquivos de cache do Python
+__pycache__/
+
 # Virtual environments
 .venv/
 venv/
@@ -11,7 +14,8 @@ dist/
 extracted_images/
 images/
 texto_extraido_*.txt
-resultados/
+resultados/*
+!resultados/
 
 # PDFs (não versionar por padrão)
 *.pdf
