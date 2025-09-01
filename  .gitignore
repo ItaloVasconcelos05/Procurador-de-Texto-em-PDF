@@ -14,8 +14,7 @@ dist/
 extracted_images/
 images/
 texto_extraido_*.txt
-resultados/*
-!resultados/
+resultados/
 
 # PDFs (não versionar por padrão)
 *.pdf
